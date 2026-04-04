@@ -2,13 +2,11 @@
 
 A lightweight native macOS menu bar app that shows your Claude token usage in real time — right next to the clock.
 
-![Menu bar showing 95% | 0h18m in red](https://placeholder)
+![Menu bar](images/menubar.png)
 
 ## What it shows
 
-```
-🔥 64% | 1h22m
-```
+![Dropdown](images/dropdown.png)
 
 - **%** — how much of your current 5-hour session you've used (matches Claude Settings → Usage)
 - **Timer** — how long until your session resets
@@ -25,7 +23,7 @@ Click the icon for a detailed breakdown: session %, weekly limits by model, and 
 ## Install
 
 ```bash
-git clone https://github.com/yourusername/claude-token-burn
+git clone https://github.com/AsTheSeaRises/Claude-Token-Burn
 cd claude-token-burn
 ./build.sh
 open ClaudeTokenBurn.app
