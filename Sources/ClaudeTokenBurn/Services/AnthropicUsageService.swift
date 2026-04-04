@@ -10,12 +10,12 @@ final class AnthropicUsageService {
 
     func fetchUsage() async throws -> UsageResponse {
         let token = try readAccessToken()
-        return try await callUsageAPI(token: token)
+        return try await callUsageAPI(token: token, attempt: 0)
     }
 
-    // MARK: - API call
+    // MARK: - API call (with retry on 429)
 
-    private func callUsageAPI(token: String) async throws -> UsageResponse {
+    private func callUsageAPI(token: String, attempt: Int) async throws -> UsageResponse {
         var request = URLRequest(url: usageURL)
         request.setValue("Bearer \(token)",   forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20",  forHTTPHeaderField: "anthropic-beta")
@@ -35,6 +35,11 @@ final class AnthropicUsageService {
             return try JSONDecoder().decode(UsageResponse.self, from: data)
         case 401:
             throw UsageError.tokenExpired
+        case 429 where attempt < 2:
+            // Back off and retry: 5s, then 15s
+            let delay: UInt64 = attempt == 0 ? 5_000_000_000 : 15_000_000_000
+            try await Task.sleep(nanoseconds: delay)
+            return try await callUsageAPI(token: token, attempt: attempt + 1)
         default:
             throw UsageError.httpError(http.statusCode)
         }
