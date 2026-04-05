@@ -91,8 +91,9 @@ enum UsageError: LocalizedError {
     case invalidResponse
     case httpError(Int)
     case tokenExpired
-    case geminiApiKeyMissing
-    case geminiInvalidApiKey
+    case googleAuthRequired
+    case googleAuthFailed
+    case cloudCodeApiError(Int)
 
     var errorDescription: String? {
         switch self {
@@ -101,15 +102,17 @@ enum UsageError: LocalizedError {
         case .noOAuthCredentials:
             return "No Claude login found — run 'claude auth login' in Terminal"
         case .invalidResponse:
-            return "Unexpected response from Anthropic API"
+            return "Unexpected response from API"
         case .httpError(let code):
             return "API error (HTTP \(code))"
         case .tokenExpired:
             return "Session expired — open Claude Code to refresh, then click Refresh Now"
-        case .geminiApiKeyMissing:
-            return "Gemini API key not configured — open Settings to add your key"
-        case .geminiInvalidApiKey:
-            return "Gemini API key is invalid — check your key in Settings"
+        case .googleAuthRequired:
+            return "Not logged in to Google — click Login to authenticate"
+        case .googleAuthFailed:
+            return "Google authentication failed — please try again"
+        case .cloudCodeApiError(let code):
+            return "Google Cloud Code API error (HTTP \(code))"
         }
     }
 }

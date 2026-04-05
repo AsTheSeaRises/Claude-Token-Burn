@@ -3,107 +3,161 @@ import Foundation
 final class GeminiUsageService: UsageServiceProtocol {
     static let shared = GeminiUsageService()
 
-    private let modelsBaseURL = "https://generativelanguage.googleapis.com/v1beta/models"
+    private let cloudCodeBaseURL = "https://cloudcode-pa.googleapis.com"
 
     private init() {}
 
     func fetchUsage() async throws -> ProviderUsageData {
-        let settings = SettingsStore.shared.settings
-        let apiKey = settings.geminiApiKey
+        let token = try await GoogleAuthService.shared.getValidAccessToken()
 
-        guard !apiKey.isEmpty else {
-            throw UsageError.geminiApiKeyMissing
+        // Fetch quota data from Cloud Code API
+        let assistResponse = try await loadCodeAssist(token: token)
+
+        // Cache the project ID if we got one
+        if let projectId = assistResponse.projectId {
+            GoogleAuthService.shared.updateProjectId(projectId)
         }
 
-        // Validate API key and get available models
-        let models = try await fetchModels(apiKey: apiKey)
+        // Optionally fetch available models for richer data
+        let modelsResponse = try? await fetchAvailableModels(token: token)
 
-        // Compute utilization based on configured quota limits
-        return buildUsageData(models: models, settings: settings)
+        return buildUsageData(assist: assistResponse, models: modelsResponse)
     }
 
-    // MARK: - API Calls
+    // MARK: - Cloud Code API Calls
 
-    private func fetchModels(apiKey: String) async throws -> GeminiModelsResponse {
-        guard let url = URL(string: "\(modelsBaseURL)?key=\(apiKey)") else {
-            throw UsageError.invalidResponse
-        }
-
+    private func loadCodeAssist(token: String) async throws -> CloudCodeAssistResponse {
+        let url = URL(string: "\(cloudCodeBaseURL)/v1internal:loadCodeAssist")!
         var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("antigravity", forHTTPHeaderField: "User-Agent")
+        request.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
         request.timeoutInterval = 30
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let body: [String: Any] = [
+            "metadata": [
+                "ideType": "MACOS_APP",
+                "platform": "darwin",
+                "pluginType": "PLUGIN_TYPE_UNSPECIFIED",
+            ]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw UsageError.invalidResponse
         }
 
         switch http.statusCode {
         case 200:
-            return try JSONDecoder().decode(GeminiModelsResponse.self, from: data)
-        case 400, 403:
-            throw UsageError.geminiInvalidApiKey
+            return try JSONDecoder().decode(CloudCodeAssistResponse.self, from: data)
+        case 401, 403:
+            throw UsageError.googleAuthRequired
         default:
-            throw UsageError.httpError(http.statusCode)
+            throw UsageError.cloudCodeApiError(http.statusCode)
         }
     }
 
-    // MARK: - Usage Computation
+    private func fetchAvailableModels(token: String) async throws -> CloudCodeModelsResponse {
+        let url = URL(string: "\(cloudCodeBaseURL)/v1internal:fetchAvailableModels")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("antigravity", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 30
+        request.httpBody = "{}".data(using: .utf8)
 
-    private func buildUsageData(models: GeminiModelsResponse, settings: AppSettings) -> ProviderUsageData {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw UsageError.invalidResponse
+        }
+
+        return try JSONDecoder().decode(CloudCodeModelsResponse.self, from: data)
+    }
+
+    // MARK: - Data Mapping
+
+    private func buildUsageData(assist: CloudCodeAssistResponse, models: CloudCodeModelsResponse?) -> ProviderUsageData {
         var data = ProviderUsageData()
 
-        // Session utilization: based on per-minute quota window
-        // Since we can't query real-time RPM usage from Google, show quota config info
-        // The session window resets every minute for RPM-based quotas
-        let now = Date()
-        let calendar = Calendar.current
-        let nextMinute = calendar.date(byAdding: .minute, value: 1, to: now)
-        data.sessionUtilization = 0
-        data.sessionResetsAt = nextMinute
-
-        // Daily utilization: resets at midnight Pacific
-        var pacificCalendar = Calendar.current
-        pacificCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
-        if let startOfDay = pacificCalendar.date(bySettingHour: 0, minute: 0, second: 0, of: now) {
-            let nextDay = pacificCalendar.date(byAdding: .day, value: 1, to: startOfDay)!
-            data.weeklyResetsAt = nextDay
+        // Collect all model quota entries
+        var modelQuotas: [CloudCodeModelConfig] = []
+        if let configs = assist.cascadeModelConfigData?.modelConfigs {
+            modelQuotas = configs.filter { $0.quotaInfo != nil && shouldShowModel($0) }
         }
-        data.weeklyUtilization = 0
 
-        // Model breakdowns from available models
+        // If the assist response didn't have model configs, try the models response
+        if modelQuotas.isEmpty, let availableModels = models?.models {
+            modelQuotas = availableModels.map { m in
+                CloudCodeModelConfig(modelId: m.modelId, displayLabel: m.displayLabel, quotaInfo: m.quotaInfo)
+            }.filter { $0.quotaInfo != nil && shouldShowModel($0) }
+        }
+
+        // Session utilization: use the most-consumed model's utilization
+        // (utilization = 100 - remainingPercent)
+        var highestUtilization = 0
+        var soonestReset: Date?
+
         var breakdowns: [ModelBreakdown] = []
-        let geminiModels = models.models ?? []
-        let hasGeminiPro = geminiModels.contains { $0.name?.contains("gemini-2.5-pro") == true || $0.name?.contains("gemini-pro") == true }
-        let hasGeminiFlash = geminiModels.contains { $0.name?.contains("gemini-2.5-flash") == true || $0.name?.contains("gemini-flash") == true }
+        for model in modelQuotas {
+            let remaining = model.quotaInfo?.remainingPercent ?? 100
+            let utilization = max(0, 100 - remaining)
+            let label = cleanModelLabel(model.displayLabel ?? model.modelId ?? "Unknown")
 
-        if hasGeminiPro {
-            breakdowns.append(ModelBreakdown(label: "Pro", utilization: 0))
+            breakdowns.append(ModelBreakdown(label: label, utilization: utilization))
+
+            if utilization > highestUtilization {
+                highestUtilization = utilization
+            }
+            if let resetDate = model.quotaInfo?.resetDate {
+                if soonestReset == nil || resetDate < soonestReset! {
+                    soonestReset = resetDate
+                }
+            }
         }
-        if hasGeminiFlash {
-            breakdowns.append(ModelBreakdown(label: "Flash", utilization: 0))
-        }
-        if breakdowns.isEmpty {
-            // Fallback: show generic entry
-            breakdowns.append(ModelBreakdown(label: "Gemini", utilization: 0))
-        }
+
+        // Sort breakdowns alphabetically
+        breakdowns.sort { $0.label < $1.label }
+
+        data.sessionUtilization = highestUtilization
+        data.sessionResetsAt = soonestReset
         data.modelBreakdowns = breakdowns
+
+        // Weekly/credits utilization
+        if let credits = assist.promptCredits {
+            data.weeklyUtilization = credits.usedPercent
+            // Credits typically reset monthly — no reset date from API, so leave nil
+            data.weeklyResetsAt = nil
+
+            // Map to ExtraUsage for display
+            data.extraUsage = ExtraUsage(
+                isEnabled: true,
+                monthlyLimit: credits.monthlyLimit,
+                usedCredits: credits.used ?? ((credits.monthlyLimit ?? 0) - (credits.available ?? 0)),
+                currency: nil
+            )
+        }
 
         return data
     }
-}
 
-// MARK: - Gemini API Response Models
+    private func shouldShowModel(_ model: CloudCodeModelConfig) -> Bool {
+        let id = model.modelId?.lowercased() ?? ""
+        // Filter out internal/non-user-facing models
+        if id.hasPrefix("chat_") || id.hasPrefix("tab_") || id.hasPrefix("rev") { return false }
+        if id.contains("imagen") || id.contains("lite") { return false }
+        return true
+    }
 
-struct GeminiModelsResponse: Codable {
-    let models: [GeminiModel]?
-}
-
-struct GeminiModel: Codable {
-    let name: String?
-    let displayName: String?
-    let description: String?
-    let inputTokenLimit: Int?
-    let outputTokenLimit: Int?
+    private func cleanModelLabel(_ label: String) -> String {
+        // Simplify labels like "Gemini 2.5 Pro" → "2.5 Pro"
+        var cleaned = label
+        if cleaned.lowercased().hasPrefix("gemini ") {
+            cleaned = String(cleaned.dropFirst(7))
+        }
+        return cleaned
+    }
 }

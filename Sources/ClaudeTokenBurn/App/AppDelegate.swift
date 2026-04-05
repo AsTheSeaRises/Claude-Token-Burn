@@ -13,10 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationManager.shared.requestAuthorization()
 
         viewModel.onUpdate = { [weak self] in self?.refreshStatusItem() }
-        viewModel.onOpenSettings = { [weak self] in
-            self?.closePopover()
-            self?.openSettings()
-        }
 
         setupStatusItem()
         setupPopover()
