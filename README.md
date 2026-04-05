@@ -40,7 +40,7 @@ open /Applications/ClaudeTokenBurn.app
 
 The app reads your Claude OAuth token directly from the macOS Keychain — the same token Claude Code stores when you log in. It then calls Anthropic's usage API to get your real-time session data. No separate login, no API key needed.
 
-**Token refresh:** Claude Code automatically keeps the token fresh as long as you use it. If you see "Session expired", open Claude Code (any command), then right-click the menu bar icon → **Refresh Now**.
+**Token refresh:** Claude Code automatically keeps the token fresh as long as you use it. If the token expires, the app detects it instantly (no wasted retries) and shows a **Login to Claude** button in the dropdown. Click it — a browser window opens for OAuth approval, and the app refreshes automatically once you're signed in.
 
 ## Settings
 
@@ -64,7 +64,6 @@ open ClaudeTokenBurn.app
 ## Limitations
 
 - Requires Claude Code to be installed — it piggybacks on Claude Code's authentication
-- No standalone login flow (personal use / developer tool)
 - Token data updates every 60 seconds by default
 
 ## License
