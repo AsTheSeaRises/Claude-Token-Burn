@@ -10,6 +10,7 @@ struct SettingsView: View {
             Form {
                 pollingSection
                 notificationsSection
+                geminiSection
                 displaySection
             }
             .formStyle(.grouped)
@@ -22,7 +23,7 @@ struct SettingsView: View {
                     .padding(12)
             }
         }
-        .frame(width: 360, height: 380)
+        .frame(width: 360, height: 480)
     }
 
     private var pollingSection: some View {
@@ -47,6 +48,29 @@ struct SettingsView: View {
                         .multilineTextAlignment(.trailing)
                     Text("% used").foregroundColor(.secondary)
                 }
+            }
+        }
+    }
+
+    private var geminiSection: some View {
+        Section("Gemini / Vertex AI") {
+            SecureField("API Key", text: $store.settings.geminiApiKey)
+            TextField("Project ID (optional)", text: $store.settings.geminiProjectId)
+            HStack {
+                Text("Daily Quota Limit")
+                Spacer()
+                TextField("", value: $store.settings.geminiDailyQuotaLimit, format: .number)
+                    .frame(width: 60)
+                    .multilineTextAlignment(.trailing)
+                Text("req/day").foregroundColor(.secondary)
+            }
+            HStack {
+                Text("RPM Limit")
+                Spacer()
+                TextField("", value: $store.settings.geminiRpmLimit, format: .number)
+                    .frame(width: 60)
+                    .multilineTextAlignment(.trailing)
+                Text("req/min").foregroundColor(.secondary)
             }
         }
     }

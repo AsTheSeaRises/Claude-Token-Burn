@@ -6,4 +6,13 @@ struct AppSettings: Codable {
     var enabledThresholds: [Bool]        = [true, true, true]
     var launchAtLogin: Bool              = false
     var showExtraUsage: Bool             = true
+
+    // Provider selection
+    var selectedProvider: String          = "claude"
+
+    // Gemini / Vertex AI settings
+    var geminiApiKey: String              = ""
+    var geminiProjectId: String           = ""
+    var geminiDailyQuotaLimit: Int        = 1500
+    var geminiRpmLimit: Int               = 360
 }

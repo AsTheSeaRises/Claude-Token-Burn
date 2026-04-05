@@ -2,15 +2,19 @@ import Foundation
 import Combine
 
 final class TokenBurnViewModel: ObservableObject {
-    // Session (5-hour window)
+    // Provider selection
+    @Published var selectedProvider: UsageProvider = .claude
+
+    // Session (5-hour window / per-minute for Gemini)
     @Published var sessionUtilization: Int  = 0     // 0–100 % used
     @Published var sessionResetsAt: Date?   = nil
 
-    // Weekly limits
+    // Weekly / daily limits
     @Published var weeklyUtilization: Int   = 0
     @Published var weeklyResetsAt: Date?    = nil
-    @Published var weeklyOpus: Int?         = nil
-    @Published var weeklySonnet: Int?       = nil
+
+    // Model breakdowns (generic — Opus/Sonnet for Claude, Pro/Flash for Gemini)
+    @Published var modelBreakdowns: [ModelBreakdown] = []
 
     // Extra usage
     @Published var extraUsage: ExtraUsage?  = nil
@@ -24,13 +28,26 @@ final class TokenBurnViewModel: ObservableObject {
 
     // Called after each refresh so AppDelegate can update the status bar text
     var onUpdate: (() -> Void)?
+    // Called when Gemini needs login (open Settings)
+    var onOpenSettings: (() -> Void)?
 
-    private let usageService  = AnthropicUsageService.shared
     private let settingsStore = SettingsStore.shared
     private var pollTimer: Timer?
     private var settingsCancellable: AnyCancellable?
 
+    private var currentService: UsageServiceProtocol {
+        switch selectedProvider {
+        case .claude: return AnthropicUsageService.shared
+        case .gemini: return GeminiUsageService.shared
+        }
+    }
+
     init() {
+        // Restore saved provider
+        if let saved = UsageProvider(rawValue: settingsStore.settings.selectedProvider) {
+            selectedProvider = saved
+        }
+
         refresh()
         startPollTimer()
 
@@ -39,19 +56,44 @@ final class TokenBurnViewModel: ObservableObject {
             .sink { [weak self] in self?.restartPollTimer() }
     }
 
+    func switchProvider(_ provider: UsageProvider) {
+        guard provider != selectedProvider else { return }
+        selectedProvider = provider
+        settingsStore.settings.selectedProvider = provider.rawValue
+
+        // Clear current data
+        sessionUtilization = 0
+        sessionResetsAt = nil
+        weeklyUtilization = 0
+        weeklyResetsAt = nil
+        modelBreakdowns = []
+        extraUsage = nil
+        errorMessage = nil
+        needsLogin = false
+        lastUpdated = nil
+
+        refresh()
+    }
+
     func refresh() {
         guard !isLoading else { return }
         isLoading = true
 
         Task { @MainActor in
             do {
-                let response = try await usageService.fetchUsage()
-                apply(response)
+                let data = try await currentService.fetchUsage()
+                apply(data)
                 errorMessage = nil
-                needsLogin   = false
+                needsLogin   = data.needsLogin
                 lastUpdated  = Date()
             } catch UsageError.tokenExpired {
                 errorMessage = "Session expired"
+                needsLogin   = true
+            } catch UsageError.geminiApiKeyMissing {
+                errorMessage = UsageError.geminiApiKeyMissing.localizedDescription
+                needsLogin   = true
+            } catch UsageError.geminiInvalidApiKey {
+                errorMessage = UsageError.geminiInvalidApiKey.localizedDescription
                 needsLogin   = true
             } catch {
                 errorMessage = error.localizedDescription
@@ -62,6 +104,16 @@ final class TokenBurnViewModel: ObservableObject {
     }
 
     func login() {
+        switch selectedProvider {
+        case .claude:
+            loginClaude()
+        case .gemini:
+            // For Gemini, open settings so user can enter API key
+            onOpenSettings?()
+        }
+    }
+
+    private func loginClaude() {
         guard !isLoggingIn else { return }
         isLoggingIn = true
         errorMessage = nil
@@ -69,9 +121,8 @@ final class TokenBurnViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await AuthService.shared.login()
-                // Login succeeded — fetch fresh data
-                let response = try await usageService.fetchUsage()
-                apply(response)
+                let data = try await currentService.fetchUsage()
+                apply(data)
                 errorMessage = nil
                 needsLogin   = false
                 lastUpdated  = Date()
@@ -103,22 +154,18 @@ final class TokenBurnViewModel: ObservableObject {
 
     // MARK: - Private
 
-    private func apply(_ r: UsageResponse) {
-        if let w = r.fiveHour {
-            sessionUtilization = w.utilization
-            sessionResetsAt    = w.resetsAtDate
-        }
-        if let w = r.sevenDay {
-            weeklyUtilization = w.utilization
-            weeklyResetsAt    = w.resetsAtDate
-        }
-        weeklyOpus    = r.sevenDayOpus?.utilization
-        weeklySonnet  = r.sevenDaySonnet?.utilization
-        extraUsage    = r.extraUsage
+    private func apply(_ data: ProviderUsageData) {
+        sessionUtilization = data.sessionUtilization
+        sessionResetsAt    = data.sessionResetsAt
+        weeklyUtilization  = data.weeklyUtilization
+        weeklyResetsAt     = data.weeklyResetsAt
+        modelBreakdowns    = data.modelBreakdowns
+        extraUsage         = data.extraUsage
 
         NotificationManager.shared.checkThresholds(
             percentUsed: Double(sessionUtilization),
-            estimatedTimeRemaining: sessionTimeRemaining
+            estimatedTimeRemaining: sessionTimeRemaining,
+            providerName: selectedProvider.displayName
         )
     }
 

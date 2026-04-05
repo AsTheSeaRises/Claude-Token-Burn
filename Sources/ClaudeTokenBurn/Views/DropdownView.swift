@@ -7,6 +7,9 @@ struct DropdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            providerPicker
+            Divider().padding(.vertical, 6)
+
             header
             Divider().padding(.vertical, 6)
 
@@ -16,7 +19,8 @@ struct DropdownView: View {
                 sessionSection
                 Divider().padding(.vertical, 6)
                 weeklySection
-                if viewModel.extraUsage?.isEnabled == true {
+                if viewModel.selectedProvider == .claude,
+                   viewModel.extraUsage?.isEnabled == true {
                     Divider().padding(.vertical, 6)
                     extraUsageSection
                 }
@@ -29,13 +33,28 @@ struct DropdownView: View {
         .frame(width: 300)
     }
 
+    // MARK: - Provider Picker
+
+    private var providerPicker: some View {
+        Picker("Provider", selection: Binding(
+            get: { viewModel.selectedProvider },
+            set: { viewModel.switchProvider($0) }
+        )) {
+            ForEach(UsageProvider.allCases) { provider in
+                Text(provider.displayName).tag(provider)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "flame.fill")
+            Image(systemName: viewModel.selectedProvider.iconName)
                 .foregroundColor(sessionColor)
-            Text("Claude Token Burn")
+            Text("\(viewModel.selectedProvider.displayName) Token Burn")
                 .font(.headline)
             Spacer()
             if viewModel.isLoading {
@@ -48,7 +67,7 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Session (5-hour)
+    // MARK: - Session (5-hour / per-minute)
 
     private var sessionSection: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -67,11 +86,11 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Weekly
+    // MARK: - Weekly / Daily
 
     private var weeklySection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionLabel("This Week")
+            sectionLabel(viewModel.selectedProvider == .claude ? "This Week" : "Today")
 
             progressBar(fraction: Double(100 - viewModel.weeklyUtilization) / 100, color: weeklyColor)
                 .padding(.bottom, 2)
@@ -82,11 +101,8 @@ struct DropdownView: View {
                 row("Resets", value: formatWeeklyReset(resets))
             }
 
-            if let opus = viewModel.weeklyOpus {
-                row("  Opus", value: "\(opus)% used")
-            }
-            if let sonnet = viewModel.weeklySonnet {
-                row("  Sonnet", value: "\(sonnet)% used")
+            ForEach(viewModel.modelBreakdowns) { breakdown in
+                row("  \(breakdown.label)", value: "\(breakdown.utilization)% used")
             }
         }
     }
@@ -119,7 +135,7 @@ struct DropdownView: View {
             }
 
             if viewModel.needsLogin {
-                if viewModel.isLoggingIn {
+                if viewModel.selectedProvider == .claude, viewModel.isLoggingIn {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
                         Text("Opening browser…")
@@ -129,8 +145,11 @@ struct DropdownView: View {
                 } else {
                     Button(action: { viewModel.login() }) {
                         HStack(spacing: 6) {
-                            Image(systemName: "person.badge.key.fill").frame(width: 14)
-                            Text("Login to Claude")
+                            Image(systemName: viewModel.selectedProvider == .claude
+                                  ? "person.badge.key.fill"
+                                  : "key.fill")
+                                .frame(width: 14)
+                            Text(viewModel.selectedProvider.loginActionLabel)
                             Spacer()
                         }
                         .font(.callout)

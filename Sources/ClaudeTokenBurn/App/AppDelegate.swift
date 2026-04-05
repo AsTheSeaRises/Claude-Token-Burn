@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationManager.shared.requestAuthorization()
 
         viewModel.onUpdate = { [weak self] in self?.refreshStatusItem() }
+        viewModel.onOpenSettings = { [weak self] in
+            self?.closePopover()
+            self?.openSettings()
+        }
 
         setupStatusItem()
         setupPopover()
@@ -38,10 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         ]
         let str = NSMutableAttributedString()
-        // Flame glyph via SF Symbols rendered as image attachment
-        if let img = NSImage(systemSymbolName: "flame.fill", accessibilityDescription: nil) {
+        let iconName = viewModel.selectedProvider.iconName
+        if let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
             img.isTemplate = false
-            // Tint the image
             let tinted = img.copy() as! NSImage
             tinted.lockFocus()
             color.set()
@@ -89,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let controller = NSHostingController(rootView: dropdownView)
         let pop = NSPopover()
-        pop.contentSize     = NSSize(width: 300, height: 400)
+        pop.contentSize     = NSSize(width: 300, height: 440)
         pop.behavior        = .transient
         pop.contentViewController = controller
         self.popover = pop
@@ -126,12 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.settingsWindow?.close()
         })
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        win.title = "Claude Token Burn — Settings"
+        win.title = "Token Burn — Settings"
         win.contentViewController = NSHostingController(rootView: settingsView)
         win.center()
         win.makeKeyAndOrderFront(nil)

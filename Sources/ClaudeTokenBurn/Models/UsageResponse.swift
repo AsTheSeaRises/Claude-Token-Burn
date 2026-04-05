@@ -91,6 +91,8 @@ enum UsageError: LocalizedError {
     case invalidResponse
     case httpError(Int)
     case tokenExpired
+    case geminiApiKeyMissing
+    case geminiInvalidApiKey
 
     var errorDescription: String? {
         switch self {
@@ -101,9 +103,13 @@ enum UsageError: LocalizedError {
         case .invalidResponse:
             return "Unexpected response from Anthropic API"
         case .httpError(let code):
-            return "Anthropic API error (HTTP \(code))"
+            return "API error (HTTP \(code))"
         case .tokenExpired:
             return "Session expired — open Claude Code to refresh, then click Refresh Now"
+        case .geminiApiKeyMissing:
+            return "Gemini API key not configured — open Settings to add your key"
+        case .geminiInvalidApiKey:
+            return "Gemini API key is invalid — check your key in Settings"
         }
     }
 }

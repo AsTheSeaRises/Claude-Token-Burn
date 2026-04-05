@@ -1,23 +1,47 @@
 import Foundation
 import Security
 
-final class AnthropicUsageService {
+final class AnthropicUsageService: UsageServiceProtocol {
     static let shared = AnthropicUsageService()
 
     private let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     private init() {}
 
-    func fetchUsage() async throws -> UsageResponse {
+    func fetchUsage() async throws -> ProviderUsageData {
         let creds = try readCredentials()
 
-        // Check token expiry before making the API call
         let expiryDate = Date(timeIntervalSince1970: TimeInterval(creds.expiresAt) / 1000.0)
         if expiryDate.timeIntervalSinceNow < 0 {
             throw UsageError.tokenExpired
         }
 
-        return try await callUsageAPI(token: creds.accessToken, attempt: 0)
+        let response = try await callUsageAPI(token: creds.accessToken, attempt: 0)
+        return mapToProviderData(response)
+    }
+
+    private func mapToProviderData(_ r: UsageResponse) -> ProviderUsageData {
+        var data = ProviderUsageData()
+
+        if let w = r.fiveHour {
+            data.sessionUtilization = w.utilization
+            data.sessionResetsAt = w.resetsAtDate
+        }
+        if let w = r.sevenDay {
+            data.weeklyUtilization = w.utilization
+            data.weeklyResetsAt = w.resetsAtDate
+        }
+
+        var breakdowns: [ModelBreakdown] = []
+        if let opus = r.sevenDayOpus {
+            breakdowns.append(ModelBreakdown(label: "Opus", utilization: opus.utilization))
+        }
+        if let sonnet = r.sevenDaySonnet {
+            breakdowns.append(ModelBreakdown(label: "Sonnet", utilization: sonnet.utilization))
+        }
+        data.modelBreakdowns = breakdowns
+        data.extraUsage = r.extraUsage
+        return data
     }
 
     // MARK: - API call (with retry on transient 429)
