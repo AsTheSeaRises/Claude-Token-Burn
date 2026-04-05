@@ -28,8 +28,6 @@ final class TokenBurnViewModel: ObservableObject {
 
     // Called after each refresh so AppDelegate can update the status bar text
     var onUpdate: (() -> Void)?
-    // Called when Gemini needs login (open Settings)
-    var onOpenSettings: (() -> Void)?
 
     private let settingsStore = SettingsStore.shared
     private var pollTimer: Timer?
@@ -89,11 +87,11 @@ final class TokenBurnViewModel: ObservableObject {
             } catch UsageError.tokenExpired {
                 errorMessage = "Session expired"
                 needsLogin   = true
-            } catch UsageError.geminiApiKeyMissing {
-                errorMessage = UsageError.geminiApiKeyMissing.localizedDescription
+            } catch UsageError.googleAuthRequired {
+                errorMessage = UsageError.googleAuthRequired.localizedDescription
                 needsLogin   = true
-            } catch UsageError.geminiInvalidApiKey {
-                errorMessage = UsageError.geminiInvalidApiKey.localizedDescription
+            } catch UsageError.googleAuthFailed {
+                errorMessage = UsageError.googleAuthFailed.localizedDescription
                 needsLogin   = true
             } catch {
                 errorMessage = error.localizedDescription
@@ -104,23 +102,18 @@ final class TokenBurnViewModel: ObservableObject {
     }
 
     func login() {
-        switch selectedProvider {
-        case .claude:
-            loginClaude()
-        case .gemini:
-            // For Gemini, open settings so user can enter API key
-            onOpenSettings?()
-        }
-    }
-
-    private func loginClaude() {
         guard !isLoggingIn else { return }
         isLoggingIn = true
         errorMessage = nil
 
         Task { @MainActor in
             do {
-                try await AuthService.shared.login()
+                switch selectedProvider {
+                case .claude:
+                    try await AuthService.shared.login()
+                case .gemini:
+                    try await GoogleAuthService.shared.login()
+                }
                 let data = try await currentService.fetchUsage()
                 apply(data)
                 errorMessage = nil

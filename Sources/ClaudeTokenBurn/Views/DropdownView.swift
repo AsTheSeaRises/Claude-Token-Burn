@@ -19,8 +19,7 @@ struct DropdownView: View {
                 sessionSection
                 Divider().padding(.vertical, 6)
                 weeklySection
-                if viewModel.selectedProvider == .claude,
-                   viewModel.extraUsage?.isEnabled == true {
+                if viewModel.extraUsage?.isEnabled == true {
                     Divider().padding(.vertical, 6)
                     extraUsageSection
                 }
@@ -111,12 +110,19 @@ struct DropdownView: View {
 
     private var extraUsageSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionLabel("Extra Usage")
+            sectionLabel(viewModel.selectedProvider == .gemini ? "Prompt Credits" : "Extra Usage")
             if let extra = viewModel.extraUsage {
-                let currency = extra.currency ?? "USD"
-                let used     = extra.usedCredits.map { formatCredits($0, currency: currency) } ?? "—"
-                let limit    = extra.monthlyLimit.map { formatCredits($0, currency: currency) } ?? "—"
-                row("Spent", value: "\(used) / \(limit)")
+                if let currency = extra.currency {
+                    // Claude: currency-based display
+                    let used  = extra.usedCredits.map { formatCredits($0, currency: currency) } ?? "—"
+                    let limit = extra.monthlyLimit.map { formatCredits($0, currency: currency) } ?? "—"
+                    row("Spent", value: "\(used) / \(limit)")
+                } else {
+                    // Gemini: raw credit counts
+                    let used  = extra.usedCredits.map { "\($0)" } ?? "—"
+                    let limit = extra.monthlyLimit.map { "\($0)" } ?? "—"
+                    row("Used", value: "\(used) / \(limit)")
+                }
             }
         }
     }
@@ -135,7 +141,7 @@ struct DropdownView: View {
             }
 
             if viewModel.needsLogin {
-                if viewModel.selectedProvider == .claude, viewModel.isLoggingIn {
+                if viewModel.isLoggingIn {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
                         Text("Opening browser…")
@@ -145,9 +151,7 @@ struct DropdownView: View {
                 } else {
                     Button(action: { viewModel.login() }) {
                         HStack(spacing: 6) {
-                            Image(systemName: viewModel.selectedProvider == .claude
-                                  ? "person.badge.key.fill"
-                                  : "key.fill")
+                            Image(systemName: "person.badge.key.fill")
                                 .frame(width: 14)
                             Text(viewModel.selectedProvider.loginActionLabel)
                             Spacer()

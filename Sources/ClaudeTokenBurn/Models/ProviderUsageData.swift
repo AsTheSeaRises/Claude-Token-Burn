@@ -23,7 +23,7 @@ enum UsageProvider: String, Codable, CaseIterable, Identifiable {
     var loginActionLabel: String {
         switch self {
         case .claude: return "Login to Claude"
-        case .gemini: return "Configure Gemini API Key"
+        case .gemini: return "Login to Google"
         }
     }
 }

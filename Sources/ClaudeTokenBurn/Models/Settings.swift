@@ -10,9 +10,6 @@ struct AppSettings: Codable {
     // Provider selection
     var selectedProvider: String          = "claude"
 
-    // Gemini / Vertex AI settings
-    var geminiApiKey: String              = ""
+    // Gemini settings (kept for backwards compat, project ID auto-populated from API)
     var geminiProjectId: String           = ""
-    var geminiDailyQuotaLimit: Int        = 1500
-    var geminiRpmLimit: Int               = 360
 }

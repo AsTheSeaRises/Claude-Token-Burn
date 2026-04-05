@@ -3,6 +3,9 @@ import ServiceManagement
 
 struct SettingsView: View {
     @ObservedObject private var store = SettingsStore.shared
+    @State private var googleEmail: String? = GoogleAuthService.shared.currentEmail
+    @State private var googleProjectId: String? = GoogleAuthService.shared.currentProjectId
+    @State private var isGoogleLoggedIn: Bool = GoogleAuthService.shared.isAuthenticated
     var onDone: (() -> Void)?
 
     var body: some View {
@@ -23,7 +26,7 @@ struct SettingsView: View {
                     .padding(12)
             }
         }
-        .frame(width: 360, height: 480)
+        .frame(width: 360, height: 440)
     }
 
     private var pollingSection: some View {
@@ -53,24 +56,62 @@ struct SettingsView: View {
     }
 
     private var geminiSection: some View {
-        Section("Gemini / Vertex AI") {
-            SecureField("API Key", text: $store.settings.geminiApiKey)
-            TextField("Project ID (optional)", text: $store.settings.geminiProjectId)
-            HStack {
-                Text("Daily Quota Limit")
-                Spacer()
-                TextField("", value: $store.settings.geminiDailyQuotaLimit, format: .number)
-                    .frame(width: 60)
-                    .multilineTextAlignment(.trailing)
-                Text("req/day").foregroundColor(.secondary)
-            }
-            HStack {
-                Text("RPM Limit")
-                Spacer()
-                TextField("", value: $store.settings.geminiRpmLimit, format: .number)
-                    .frame(width: 60)
-                    .multilineTextAlignment(.trailing)
-                Text("req/min").foregroundColor(.secondary)
+        Section("Gemini (Google Cloud Code)") {
+            if isGoogleLoggedIn {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signed in")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                        if let email = googleEmail {
+                            Text(email)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button("Logout") {
+                        GoogleAuthService.shared.logout()
+                        isGoogleLoggedIn = false
+                        googleEmail = nil
+                        googleProjectId = nil
+                    }
+                    .foregroundColor(.red)
+                }
+                if let projectId = googleProjectId, !projectId.isEmpty {
+                    HStack {
+                        Text("Project")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(projectId)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                HStack {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .foregroundColor(.secondary)
+                    Text("Not signed in")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("Login to Google") {
+                        Task {
+                            try? await GoogleAuthService.shared.login()
+                            await MainActor.run {
+                                isGoogleLoggedIn = GoogleAuthService.shared.isAuthenticated
+                                googleEmail = GoogleAuthService.shared.currentEmail
+                                googleProjectId = GoogleAuthService.shared.currentProjectId
+                            }
+                        }
+                    }
+                }
+                Text("Uses Google OAuth to access Gemini quota data via the Cloud Code API.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
     }
