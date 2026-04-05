@@ -108,13 +108,38 @@ struct DropdownView: View {
     // MARK: - Error
 
     private func errorSection(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-            Text(message)
-                .font(.callout)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text(message)
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if viewModel.needsLogin {
+                if viewModel.isLoggingIn {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.7)
+                        Text("Opening browser…")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    Button(action: { viewModel.login() }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.badge.key.fill").frame(width: 14)
+                            Text("Login to Claude")
+                            Spacer()
+                        }
+                        .font(.callout)
+                        .foregroundColor(.accentColor)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.vertical, 4)
     }

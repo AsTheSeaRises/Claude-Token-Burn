@@ -9,11 +9,18 @@ final class AnthropicUsageService {
     private init() {}
 
     func fetchUsage() async throws -> UsageResponse {
-        let token = try readAccessToken()
-        return try await callUsageAPI(token: token, attempt: 0)
+        let creds = try readCredentials()
+
+        // Check token expiry before making the API call
+        let expiryDate = Date(timeIntervalSince1970: TimeInterval(creds.expiresAt) / 1000.0)
+        if expiryDate.timeIntervalSinceNow < 0 {
+            throw UsageError.tokenExpired
+        }
+
+        return try await callUsageAPI(token: creds.accessToken, attempt: 0)
     }
 
-    // MARK: - API call (with retry on 429)
+    // MARK: - API call (with retry on transient 429)
 
     private func callUsageAPI(token: String, attempt: Int) async throws -> UsageResponse {
         var request = URLRequest(url: usageURL)
@@ -36,10 +43,12 @@ final class AnthropicUsageService {
         case 401:
             throw UsageError.tokenExpired
         case 429 where attempt < 2:
-            // Back off and retry: 5s, then 15s
             let delay: UInt64 = attempt == 0 ? 5_000_000_000 : 15_000_000_000
             try await Task.sleep(nanoseconds: delay)
             return try await callUsageAPI(token: token, attempt: attempt + 1)
+        case 429:
+            // Persistent 429 after retries — likely an expired/invalid token
+            throw UsageError.tokenExpired
         default:
             throw UsageError.httpError(http.statusCode)
         }
@@ -47,7 +56,7 @@ final class AnthropicUsageService {
 
     // MARK: - Keychain (read-only — Claude Code manages token refresh)
 
-    private func readAccessToken() throws -> String {
+    private func readCredentials() throws -> OAuthCredentials {
         let query: [String: Any] = [
             kSecClass       as String: kSecClassGenericPassword,
             kSecAttrService as String: "Claude Code-credentials",
@@ -66,6 +75,6 @@ final class AnthropicUsageService {
         guard let oauth = keychainData.claudeAiOauth else {
             throw UsageError.noOAuthCredentials
         }
-        return oauth.accessToken
+        return oauth
     }
 }

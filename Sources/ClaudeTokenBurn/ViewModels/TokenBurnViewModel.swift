@@ -19,6 +19,8 @@ final class TokenBurnViewModel: ObservableObject {
     @Published var errorMessage: String?    = nil
     @Published var lastUpdated: Date?       = nil
     @Published var isLoading: Bool          = false
+    @Published var needsLogin: Bool         = false
+    @Published var isLoggingIn: Bool        = false
 
     // Called after each refresh so AppDelegate can update the status bar text
     var onUpdate: (() -> Void)?
@@ -46,11 +48,37 @@ final class TokenBurnViewModel: ObservableObject {
                 let response = try await usageService.fetchUsage()
                 apply(response)
                 errorMessage = nil
+                needsLogin   = false
                 lastUpdated  = Date()
+            } catch UsageError.tokenExpired {
+                errorMessage = "Session expired"
+                needsLogin   = true
             } catch {
                 errorMessage = error.localizedDescription
             }
             isLoading = false
+            onUpdate?()
+        }
+    }
+
+    func login() {
+        guard !isLoggingIn else { return }
+        isLoggingIn = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                try await AuthService.shared.login()
+                // Login succeeded — fetch fresh data
+                let response = try await usageService.fetchUsage()
+                apply(response)
+                errorMessage = nil
+                needsLogin   = false
+                lastUpdated  = Date()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoggingIn = false
             onUpdate?()
         }
     }
