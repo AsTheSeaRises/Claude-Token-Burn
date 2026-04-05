@@ -11,7 +11,7 @@ final class NotificationManager {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    func checkThresholds(percentUsed: Double, estimatedTimeRemaining: TimeInterval) {
+    func checkThresholds(percentUsed: Double, estimatedTimeRemaining: TimeInterval, providerName: String = "Claude") {
         let settings = SettingsStore.shared.settings
         for i in settings.notificationThresholds.indices {
             guard i < settings.enabledThresholds.count, settings.enabledThresholds[i] else { continue }
@@ -19,15 +19,15 @@ final class NotificationManager {
             let key = Int(threshold)
             guard !firedThresholds.contains(key), percentUsed >= threshold else { continue }
             firedThresholds.insert(key)
-            fire(threshold: threshold, timeRemaining: estimatedTimeRemaining)
+            fire(threshold: threshold, timeRemaining: estimatedTimeRemaining, providerName: providerName)
         }
     }
 
     func resetWindow() { firedThresholds.removeAll() }
 
-    private func fire(threshold: Double, timeRemaining: TimeInterval) {
+    private func fire(threshold: Double, timeRemaining: TimeInterval, providerName: String) {
         let content = UNMutableNotificationContent()
-        content.title = "Claude Token Burn"
+        content.title = "\(providerName) Token Burn"
         let pctLeft = Int(100 - threshold)
         var body = "\(Int(threshold))% of session used — \(pctLeft)% remaining."
         if timeRemaining > 0 {
