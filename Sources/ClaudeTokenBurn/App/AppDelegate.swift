@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         ]
         let str = NSMutableAttributedString()
-        let iconName = viewModel.selectedProvider.iconName
+        let iconName = "flame.fill"
         if let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
             img.isTemplate = false
             let tinted = img.copy() as! NSImage

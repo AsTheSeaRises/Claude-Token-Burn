@@ -7,9 +7,6 @@ struct DropdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            providerPicker
-            Divider().padding(.vertical, 6)
-
             header
             Divider().padding(.vertical, 6)
 
@@ -32,28 +29,13 @@ struct DropdownView: View {
         .frame(width: 300)
     }
 
-    // MARK: - Provider Picker
-
-    private var providerPicker: some View {
-        Picker("Provider", selection: Binding(
-            get: { viewModel.selectedProvider },
-            set: { viewModel.switchProvider($0) }
-        )) {
-            ForEach(UsageProvider.allCases) { provider in
-                Text(provider.displayName).tag(provider)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-    }
-
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: viewModel.selectedProvider.iconName)
+            Image(systemName: "flame.fill")
                 .foregroundColor(sessionColor)
-            Text("\(viewModel.selectedProvider.displayName) Token Burn")
+            Text("Claude Token Burn")
                 .font(.headline)
             Spacer()
             if viewModel.isLoading {
@@ -66,7 +48,7 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Session (5-hour / per-minute)
+    // MARK: - Session (5-hour)
 
     private var sessionSection: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -85,11 +67,11 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Weekly / Daily
+    // MARK: - Weekly
 
     private var weeklySection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionLabel(viewModel.selectedProvider == .claude ? "This Week" : "Today")
+            sectionLabel("This Week")
 
             progressBar(fraction: Double(100 - viewModel.weeklyUtilization) / 100, color: weeklyColor)
                 .padding(.bottom, 2)
@@ -110,18 +92,12 @@ struct DropdownView: View {
 
     private var extraUsageSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionLabel(viewModel.selectedProvider == .gemini ? "Prompt Credits" : "Extra Usage")
+            sectionLabel("Extra Usage")
             if let extra = viewModel.extraUsage {
                 if let currency = extra.currency {
-                    // Claude: currency-based display
                     let used  = extra.usedCredits.map { formatCredits($0, currency: currency) } ?? "—"
                     let limit = extra.monthlyLimit.map { formatCredits($0, currency: currency) } ?? "—"
                     row("Spent", value: "\(used) / \(limit)")
-                } else {
-                    // Gemini: raw credit counts
-                    let used  = extra.usedCredits.map { "\($0)" } ?? "—"
-                    let limit = extra.monthlyLimit.map { "\($0)" } ?? "—"
-                    row("Used", value: "\(used) / \(limit)")
                 }
             }
         }
@@ -153,7 +129,7 @@ struct DropdownView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "person.badge.key.fill")
                                 .frame(width: 14)
-                            Text(viewModel.selectedProvider.loginActionLabel)
+                            Text("Login to Claude")
                             Spacer()
                         }
                         .font(.callout)

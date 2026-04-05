@@ -91,9 +91,6 @@ enum UsageError: LocalizedError {
     case invalidResponse
     case httpError(Int)
     case tokenExpired
-    case googleAuthRequired
-    case googleAuthFailed
-    case cloudCodeApiError(Int)
 
     var errorDescription: String? {
         switch self {
@@ -107,12 +104,6 @@ enum UsageError: LocalizedError {
             return "API error (HTTP \(code))"
         case .tokenExpired:
             return "Session expired — open Claude Code to refresh, then click Refresh Now"
-        case .googleAuthRequired:
-            return "Not logged in to Google — click Login to authenticate"
-        case .googleAuthFailed:
-            return "Google authentication failed — please try again"
-        case .cloudCodeApiError(let code):
-            return "Google Cloud Code API error (HTTP \(code))"
         }
     }
 }

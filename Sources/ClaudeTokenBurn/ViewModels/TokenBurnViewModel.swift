@@ -2,18 +2,15 @@ import Foundation
 import Combine
 
 final class TokenBurnViewModel: ObservableObject {
-    // Provider selection
-    @Published var selectedProvider: UsageProvider = .claude
-
-    // Session (5-hour window / per-minute for Gemini)
+    // Session (5-hour window)
     @Published var sessionUtilization: Int  = 0     // 0–100 % used
     @Published var sessionResetsAt: Date?   = nil
 
-    // Weekly / daily limits
+    // Weekly limits
     @Published var weeklyUtilization: Int   = 0
     @Published var weeklyResetsAt: Date?    = nil
 
-    // Model breakdowns (generic — Opus/Sonnet for Claude, Pro/Flash for Gemini)
+    // Model breakdowns (Opus/Sonnet)
     @Published var modelBreakdowns: [ModelBreakdown] = []
 
     // Extra usage
@@ -33,19 +30,9 @@ final class TokenBurnViewModel: ObservableObject {
     private var pollTimer: Timer?
     private var settingsCancellable: AnyCancellable?
 
-    private var currentService: UsageServiceProtocol {
-        switch selectedProvider {
-        case .claude: return AnthropicUsageService.shared
-        case .gemini: return GeminiUsageService.shared
-        }
-    }
+    private let usageService = AnthropicUsageService.shared
 
     init() {
-        // Restore saved provider
-        if let saved = UsageProvider(rawValue: settingsStore.settings.selectedProvider) {
-            selectedProvider = saved
-        }
-
         refresh()
         startPollTimer()
 
@@ -54,44 +41,19 @@ final class TokenBurnViewModel: ObservableObject {
             .sink { [weak self] in self?.restartPollTimer() }
     }
 
-    func switchProvider(_ provider: UsageProvider) {
-        guard provider != selectedProvider else { return }
-        selectedProvider = provider
-        settingsStore.settings.selectedProvider = provider.rawValue
-
-        // Clear current data
-        sessionUtilization = 0
-        sessionResetsAt = nil
-        weeklyUtilization = 0
-        weeklyResetsAt = nil
-        modelBreakdowns = []
-        extraUsage = nil
-        errorMessage = nil
-        needsLogin = false
-        lastUpdated = nil
-
-        refresh()
-    }
-
     func refresh() {
         guard !isLoading else { return }
         isLoading = true
 
         Task { @MainActor in
             do {
-                let data = try await currentService.fetchUsage()
+                let data = try await usageService.fetchUsage()
                 apply(data)
                 errorMessage = nil
                 needsLogin   = data.needsLogin
                 lastUpdated  = Date()
             } catch UsageError.tokenExpired {
                 errorMessage = "Session expired"
-                needsLogin   = true
-            } catch UsageError.googleAuthRequired {
-                errorMessage = UsageError.googleAuthRequired.localizedDescription
-                needsLogin   = true
-            } catch UsageError.googleAuthFailed {
-                errorMessage = UsageError.googleAuthFailed.localizedDescription
                 needsLogin   = true
             } catch {
                 errorMessage = error.localizedDescription
@@ -108,13 +70,8 @@ final class TokenBurnViewModel: ObservableObject {
 
         Task { @MainActor in
             do {
-                switch selectedProvider {
-                case .claude:
-                    try await AuthService.shared.login()
-                case .gemini:
-                    try await GoogleAuthService.shared.login()
-                }
-                let data = try await currentService.fetchUsage()
+                try await AuthService.shared.login()
+                let data = try await usageService.fetchUsage()
                 apply(data)
                 errorMessage = nil
                 needsLogin   = false
@@ -157,8 +114,7 @@ final class TokenBurnViewModel: ObservableObject {
 
         NotificationManager.shared.checkThresholds(
             percentUsed: Double(sessionUtilization),
-            estimatedTimeRemaining: sessionTimeRemaining,
-            providerName: selectedProvider.displayName
+            estimatedTimeRemaining: sessionTimeRemaining
         )
     }
 

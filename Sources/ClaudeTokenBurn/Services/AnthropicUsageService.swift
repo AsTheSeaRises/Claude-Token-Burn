@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-final class AnthropicUsageService: UsageServiceProtocol {
+final class AnthropicUsageService {
     static let shared = AnthropicUsageService()
 
     private let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!

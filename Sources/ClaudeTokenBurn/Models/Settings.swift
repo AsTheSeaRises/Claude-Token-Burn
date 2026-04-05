@@ -6,10 +6,4 @@ struct AppSettings: Codable {
     var enabledThresholds: [Bool]        = [true, true, true]
     var launchAtLogin: Bool              = false
     var showExtraUsage: Bool             = true
-
-    // Provider selection
-    var selectedProvider: String          = "claude"
-
-    // Gemini settings (kept for backwards compat, project ID auto-populated from API)
-    var geminiProjectId: String           = ""
 }
